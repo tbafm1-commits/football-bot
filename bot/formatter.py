@@ -1,45 +1,39 @@
-“””
-bot/formatter.py
-Telegram-ისთვის ლამაზი გამომავალი ფორმატი
-“””
 from core.accumulator import Accumulator
 from core.logic import BetOption
 
-def format_accumulator(acca: Accumulator) -> str:
-“”“კუშის ფორმატირება Telegram-ისთვის”””
 
-```
-lines = []
-lines.append(f"🎯 *{acca.target} კუში*")
-lines.append(f"━━━━━━━━━━━━━━━━━━━━━━")
+def format_accumulator(acca):
+    lines = []
+    lines.append("*" + str(acca.target) + " kushi*")
+    lines.append("=" * 22)
 
-for i, leg in enumerate(acca.legs, 1):
-    prob_bar = _prob_bar(leg.our_prob)
-    lines.append(f"\n*{i}.* {leg.home_team} vs {leg.away_team}")
-    lines.append(f"    🏆 {leg.league} | 🕐 {leg.kick_off}")
-    lines.append(f"    ✅ *{leg.market}*")
-    lines.append(f"    📊 {leg.reason}")
-    lines.append(f"    {prob_bar} {leg.our_prob*100:.0f}%")
-    lines.append(f"    💰 კოეფ: *{leg.odds}*")
+    for i, leg in enumerate(acca.legs, 1):
+        prob_bar = _prob_bar(leg.our_prob)
+        lines.append("")
+        lines.append(str(i) + ". " + leg.home_team + " vs " + leg.away_team)
+        lines.append("   " + leg.league + " | " + leg.kick_off)
+        lines.append("   *" + leg.market + "*")
+        lines.append("   " + leg.reason)
+        lines.append("   " + prob_bar + " " + str(round(leg.our_prob * 100)) + "%")
+        lines.append("   koef: *" + str(leg.odds) + "*")
 
-lines.append(f"\n━━━━━━━━━━━━━━━━━━━━━━")
-lines.append(f"🏆 *ჯამური კოეფიციენტი: {acca.total_odds}*")
-lines.append(f"📈 საშ. სანდოობა: {acca.avg_prob*100:.0f}%")
-lines.append(f"📌 პოზიციები: {len(acca.legs)}")
-lines.append(f"━━━━━━━━━━━━━━━━━━━━━━")
-lines.append(f"⚠️ _სტატისტიკური ანალიზია, არა გარანტია_")
+    lines.append("")
+    lines.append("=" * 22)
+    lines.append("*jamuri koeficienti: " + str(acca.total_odds) + "*")
+    lines.append("sash. sandooba: " + str(round(acca.avg_prob * 100)) + "%")
+    lines.append("poziciebi: " + str(len(acca.legs)))
 
-return "\n".join(lines)
-```
+    return "\n".join(lines)
 
-def format_no_acca(target: int) -> str:
-return (
-f”❌ *{target} კუში ვერ შეიქმნა*\n\n”
-f”მიზეზი: დღეს საკმარისი მატჩი არ არის “
-f”ან კოეფიციენტები {target}-ის დიაპაზონში არ ხვდება.\n\n”
-f”სცადე: /acca 5 ან /acca 10”
-)
 
-def _prob_bar(prob: float) -> str:
-filled = int(prob * 10)
-return “█” * filled + “░” * (10 - filled)
+def format_no_acca(target):
+    return (
+        str(target) + " kushi ver sheiqmna.\n\n"
+        "dghes sakmarisi match ar aris.\n"
+        "scade: /acca 5 an /acca 10"
+    )
+
+
+def _prob_bar(prob):
+    filled = int(prob * 10)
+    return "█" * filled + "░" * (10 - filled)
