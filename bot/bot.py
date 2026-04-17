@@ -43,7 +43,7 @@ else:
 await update.message.reply_text(“momwere: minda 5 kushi”)
 
 async def _generate_acca(update: Update, target: int):
-msg = await update.message.reply_text(“vagenerireb “ + str(target) + “ kushis…”)
+msg = await update.message.reply_text(“vagenerireb “ + str(target) + “kushis...”)
 try:
 all_options = await get_todays_bet_options()
 if not all_options:
