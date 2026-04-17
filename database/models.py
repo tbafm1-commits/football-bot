@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -8,7 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 Base = declarative_base()
-engine = create_engine(os.getenv("DATABASE_URL", "sqlite:///football.db"))
+
+db_url = os.getenv("DATABASE_URL", "sqlite:///football.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+engine = create_engine(db_url)
 Session = sessionmaker(bind=engine)
 
 
@@ -95,9 +99,8 @@ class BettingTip(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
-    print("✅ Database initialized!")
+    print("Database initialized!")
 
 
 if __name__ == "__main__":
     init_db()
-
