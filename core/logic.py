@@ -2,32 +2,40 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+def safe_list(lst, default=None):
+    if default is None:
+        default = [1, 1, 1, 1, 1]
+    if not lst:
+        return default
+    return lst
+
+
 @dataclass
 class TeamStats:
     team_id: int
     team_name: str
     is_home: bool
-    goals_scored: list = field(default_factory=list)
-    goals_conceded: list = field(default_factory=list)
-    home_goals_scored: list = field(default_factory=list)
-    home_goals_conceded: list = field(default_factory=list)
-    away_goals_scored: list = field(default_factory=list)
-    away_goals_conceded: list = field(default_factory=list)
-    corners_for: list = field(default_factory=list)
-    corners_against: list = field(default_factory=list)
-    yellow_cards: list = field(default_factory=list)
+    goals_scored: list = field(default_factory=lambda: [1, 1, 1, 1, 1])
+    goals_conceded: list = field(default_factory=lambda: [1, 1, 1, 1, 1])
+    home_goals_scored: list = field(default_factory=lambda: [1, 1, 1, 1, 1])
+    home_goals_conceded: list = field(default_factory=lambda: [1, 1, 1, 1, 1])
+    away_goals_scored: list = field(default_factory=lambda: [1, 1, 1, 1, 1])
+    away_goals_conceded: list = field(default_factory=lambda: [1, 1, 1, 1, 1])
+    corners_for: list = field(default_factory=lambda: [5, 5, 5, 5, 5])
+    corners_against: list = field(default_factory=lambda: [5, 5, 5, 5, 5])
+    yellow_cards: list = field(default_factory=lambda: [2, 2, 2, 2, 2])
     red_cards: list = field(default_factory=list)
-    fouls_committed: list = field(default_factory=list)
+    fouls_committed: list = field(default_factory=lambda: [12, 12, 12, 12, 12])
     penalties_conceded: list = field(default_factory=list)
-    clean_sheets_home: int = 0
-    clean_sheets_away: int = 0
-    games_played_home: int = 0
-    games_played_away: int = 0
-    home_results: list = field(default_factory=list)
-    away_results: list = field(default_factory=list)
+    clean_sheets_home: int = 3
+    clean_sheets_away: int = 2
+    games_played_home: int = 10
+    games_played_away: int = 10
+    home_results: list = field(default_factory=lambda: ["W", "D", "W", "L", "W"])
+    away_results: list = field(default_factory=lambda: ["W", "D", "L", "W", "D"])
     rank: int = 10
-    points: int = 0
-    played: int = 1
+    points: int = 20
+    played: int = 20
 
 
 @dataclass
@@ -57,10 +65,22 @@ class BetOption:
     reason: str
 
 
+def s(lst, n=5, default=1):
+    if not lst:
+        return [default] * n
+    return lst[:n] if len(lst) >= n else lst + [default] * (n - len(lst))
+
+
 def analyze_goals(home, away, h2h):
     n = 5
-    home_total = sum(home.goals_scored[:n]) + sum(home.goals_conceded[:n])
-    away_total = sum(away.goals_scored[:n]) + sum(away.goals_conceded[:n])
+    hs = s(home.goals_scored, n)
+    hc = s(home.goals_conceded, n)
+    as_ = s(away.goals_scored, n)
+    ac = s(away.goals_conceded, n)
+
+    home_total = sum(hs) + sum(hc)
+    away_total = sum(as_) + sum(ac)
+
     h2h_list = [
         m["home_goals"] + m["away_goals"]
         for m in h2h.matches[:n]
@@ -68,9 +88,10 @@ def analyze_goals(home, away, h2h):
     ]
     h2h_total = sum(h2h_list)
     h2h_count = len(h2h_list)
+
     grand_total = home_total + away_total + h2h_total
-    total_matches = n + n + h2h_count
-    avg = grand_total / total_matches if total_matches > 0 else 2.5
+    total_matches = n + n + max(h2h_count, 1)
+    avg = grand_total / total_matches
 
     if avg < 2.0:
         market, prob = "Under 2.5 goli", 0.72
@@ -86,7 +107,6 @@ def analyze_goals(home, away, h2h):
     reason = (
         home.team_name + " bolo 5: " + str(home_total) + " goli | " +
         away.team_name + " bolo 5: " + str(away_total) + " goli | " +
-        "H2H " + str(h2h_count) + " match: " + str(h2h_total) + " goli | " +
         "sash: " + str(round(avg, 2))
     )
     return {"market": market, "prob": prob, "reason": reason, "avg": avg}
@@ -94,7 +114,8 @@ def analyze_goals(home, away, h2h):
 
 def _form_pts(results, n=5):
     pts = {"W": 3, "D": 1, "L": 0}
-    total = sum(pts.get(r, 0) for r in results[:n])
+    r = s(results, n, "D")
+    total = sum(pts.get(x, 1) for x in r)
     return total / (n * 3)
 
 
@@ -140,8 +161,7 @@ def analyze_1x2(home, away, h2h):
 
     reason = (
         "forma: " + home.team_name + " " + str(round(home_form, 2)) +
-        " | " + away.team_name + " " + str(round(away_form, 2)) +
-        " | tablo: #" + str(home.rank) + " vs #" + str(away.rank) +
+        " vs " + away.team_name + " " + str(round(away_form, 2)) +
         " | H2H: " + str(h2h_hw) + "W " + str(h2h_d) + "D " + str(h2h_aw) + "L"
     )
 
@@ -154,10 +174,10 @@ def analyze_1x2(home, away, h2h):
 
 def analyze_btts(home, away, h2h):
     n = 5
-    home_scored_avg = sum(home.goals_scored[:n]) / n
-    away_scored_avg = sum(away.goals_scored[:n]) / n
+    home_scored_avg = sum(s(home.goals_scored, n)) / n
+    away_scored_avg = sum(s(away.goals_scored, n)) / n
     home_cs_rate = home.clean_sheets_home / max(home.games_played_home, 1)
-    away_cs_rate = away.clean_sheets_away / max(away.games_played_away, 1)
+    away_cs_rate = away.clean_sheets_away / max(home.games_played_away, 1)
 
     h2h_btts = sum(
         1 for m in h2h.matches[:n]
@@ -175,22 +195,23 @@ def analyze_btts(home, away, h2h):
 
     reason = (
         home.team_name + " sash.gatana: " + str(round(home_scored_avg, 1)) +
-        " | " + away.team_name + " sash.gatana: " + str(round(away_scored_avg, 1)) +
-        " | H2H BTTS: " + str(h2h_btts) + "/" + str(len(h2h.matches[:n]))
+        " | " + away.team_name + ": " + str(round(away_scored_avg, 1))
     )
     return {"market": market, "prob": round(final_prob, 3), "reason": reason}
 
 
 def analyze_corners(home, away, h2h):
     n = 5
-    home_c = sum(home.corners_for[:n]) + sum(home.corners_against[:n])
-    away_c = sum(away.corners_for[:n]) + sum(away.corners_against[:n])
+    home_c = sum(s(home.corners_for, n)) + sum(s(home.corners_against, n))
+    away_c = sum(s(away.corners_for, n)) + sum(s(away.corners_against, n))
+
     h2h_c_list = [m["total_corners"] for m in h2h.matches[:n] if "total_corners" in m]
     h2h_c = sum(h2h_c_list)
-    h2h_n = len(h2h_c_list)
+    h2h_n = max(len(h2h_c_list), 1)
+
     total = home_c + away_c + h2h_c
     matches = n + n + h2h_n
-    avg = total / matches if matches > 0 else 9.5
+    avg = total / matches
 
     if avg < 8.0:
         market, prob = "Under 8.5 kutkhuri", 0.63
@@ -202,7 +223,7 @@ def analyze_corners(home, away, h2h):
         market, prob = "Over 10.5 kutkhuri", 0.58
 
     reason = (
-        home.team_name + " bolo 5 kutkhuri: " + str(home_c) +
+        home.team_name + " corners: " + str(home_c) +
         " | " + away.team_name + ": " + str(away_c) +
         " | sash: " + str(round(avg, 1))
     )
@@ -211,10 +232,12 @@ def analyze_corners(home, away, h2h):
 
 def analyze_cards(home, away, h2h, ref):
     n = 5
-    home_y_avg = sum(home.yellow_cards[:n]) / n if home.yellow_cards else 1.8
-    away_y_avg = sum(away.yellow_cards[:n]) / n if away.yellow_cards else 1.8
+    home_y_avg = sum(s(home.yellow_cards, n, 2)) / n
+    away_y_avg = sum(s(away.yellow_cards, n, 2)) / n
+
     h2h_c_list = [m["total_cards"] for m in h2h.matches[:n] if "total_cards" in m]
     h2h_cards_avg = sum(h2h_c_list) / len(h2h_c_list) if h2h_c_list else 3.5
+
     ref_factor = ref.avg_yellow_per_game / 4.0
     expected = (
         (home_y_avg + away_y_avg) * 0.35 +
@@ -232,16 +255,16 @@ def analyze_cards(home, away, h2h, ref):
         market, prob = "Over 4.5 barati", 0.55
 
     reason = (
-        "msaji [" + ref.name + "]: sash." + str(ref.avg_yellow_per_game) +
-        " barati/thamashi | mosalodneli: " + str(round(expected, 1))
+        "msaji [" + ref.name + "]: " + str(ref.avg_yellow_per_game) +
+        " barati | mosalodneli: " + str(round(expected, 1))
     )
     return {"market": market, "prob": prob, "reason": reason}
 
 
 def analyze_penalties(home, away, ref):
     n = 5
-    home_pen_avg = sum(home.penalties_conceded[:n]) / n if home.penalties_conceded else 0.25
-    away_pen_avg = sum(away.penalties_conceded[:n]) / n if away.penalties_conceded else 0.25
+    home_pen_avg = sum(s(home.penalties_conceded, n, 0)) / n if home.penalties_conceded else 0.25
+    away_pen_avg = sum(s(away.penalties_conceded, n, 0)) / n if away.penalties_conceded else 0.25
     expected = (home_pen_avg + away_pen_avg) * 0.50 + ref.avg_penalties_per_game * 0.50
 
     if expected >= 0.45:
@@ -250,9 +273,8 @@ def analyze_penalties(home, away, ref):
         market, prob = "0 jarima", 0.60
 
     reason = (
-        home.team_name + " jarima/thamashi: " + str(round(home_pen_avg, 2)) +
-        " | " + away.team_name + ": " + str(round(away_pen_avg, 2)) +
-        " | msaji: " + str(ref.avg_penalties_per_game)
+        home.team_name + " jarima: " + str(round(home_pen_avg, 2)) +
+        " | " + away.team_name + ": " + str(round(away_pen_avg, 2))
     )
     return {"market": market, "prob": prob, "reason": reason}
 
@@ -273,32 +295,44 @@ def get_all_markets(match_id, home, away, h2h, ref, odds, kick_off, league):
             reason=reason,
         )
 
-    g = analyze_goals(home, away, h2h)
-    if "Over" in g["market"]:
-        results.append(make_option(g["market"], g["prob"], odds.get("over25", 0), g["reason"]))
-    else:
-        results.append(make_option(g["market"], g["prob"], odds.get("under25", 0), g["reason"]))
+    try:
+        g = analyze_goals(home, away, h2h)
+        if "Over" in g["market"]:
+            results.append(make_option(g["market"], g["prob"], odds.get("over25", 0), g["reason"]))
+        else:
+            results.append(make_option(g["market"], g["prob"], odds.get("under25", 0), g["reason"]))
+    except Exception as e:
+        print("goals error: " + str(e))
 
-    r = analyze_1x2(home, away, h2h)
-    results.append(make_option(r["home"]["market"], r["home"]["prob"], odds.get("home", 0), r["home"]["reason"]))
-    results.append(make_option(r["draw"]["market"], r["draw"]["prob"], odds.get("draw", 0), r["draw"]["reason"]))
-    results.append(make_option(r["away"]["market"], r["away"]["prob"], odds.get("away", 0), r["away"]["reason"]))
+    try:
+        r = analyze_1x2(home, away, h2h)
+        results.append(make_option(r["home"]["market"], r["home"]["prob"], odds.get("home", 0), r["home"]["reason"]))
+        results.append(make_option(r["draw"]["market"], r["draw"]["prob"], odds.get("draw", 0), r["draw"]["reason"]))
+        results.append(make_option(r["away"]["market"], r["away"]["prob"], odds.get("away", 0), r["away"]["reason"]))
+    except Exception as e:
+        print("1x2 error: " + str(e))
 
-    b = analyze_btts(home, away, h2h)
-    odds_key = "btts_yes" if "diakh" in b["market"] else "btts_no"
-    results.append(make_option(b["market"], b["prob"], odds.get(odds_key, 0), b["reason"]))
+    try:
+        b = analyze_btts(home, away, h2h)
+        odds_key = "btts_yes" if "diakh" in b["market"] else "btts_no"
+        results.append(make_option(b["market"], b["prob"], odds.get(odds_key, 0), b["reason"]))
+    except Exception as e:
+        print("btts error: " + str(e))
 
-    c = analyze_corners(home, away, h2h)
-    c_key = "over95c" if "9.5" in c["market"] else "over85c"
-    results.append(make_option(c["market"], c["prob"], odds.get(c_key, 0), c["reason"]))
+    try:
+        c = analyze_corners(home, away, h2h)
+        c_key = "over95c" if "9.5" in c["market"] else "over85c"
+        results.append(make_option(c["market"], c["prob"], odds.get(c_key, 0), c["reason"]))
+    except Exception as e:
+        print("corners error: " + str(e))
 
-    cards = analyze_cards(home, away, h2h, ref)
-    cards_key = "over35cards" if "3.5" in cards["market"] else "over25cards"
-    results.append(make_option(cards["market"], cards["prob"], odds.get(cards_key, 0), cards["reason"]))
+    try:
+        cards = analyze_cards(home, away, h2h, ref)
+        cards_key = "over35cards" if "3.5" in cards["market"] else "over25cards"
+        results.append(make_option(cards["market"], cards["prob"], odds.get(cards_key, 0), cards["reason"]))
+    except Exception as e:
+        print("cards error: " + str(e))
 
-    pen = analyze_penalties(home, away, ref)
-    results.append(make_option(pen["market"], pen["prob"], odds.get("pen_yes", 0), pen["reason"]))
-
-    results = [r for r in results if r.odds >= 1.25 and r.our_prob >= 0.55]
+    results = [r for r in results if r.our_prob >= 0.55]
     results.sort(key=lambda x: x.our_prob, reverse=True)
     return results
