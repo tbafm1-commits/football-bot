@@ -1,1 +1,9 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "cd /app && python -m bot.bot"
+  }
+}
 
