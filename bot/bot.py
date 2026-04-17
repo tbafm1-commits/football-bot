@@ -13,7 +13,7 @@ from database.models import init_db
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(**name**)
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 await update.message.reply_text(
@@ -75,5 +75,5 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message))
 print(“boti gaushvebula!”)
 app.run_polling(drop_pending_updates=True)
 
-if **name** == “**main**”:
+if __name__ == “__main__”:
 main()
