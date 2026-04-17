@@ -12,18 +12,19 @@ BASE_URL = "http://api.isportsapi.com"
 
 
 def api_request(path, params={}):
-    params["api_key"] = API_KEY
-    url = f"{BASE_URL}{path}"
+    p = dict(params)
+    p["api_key"] = API_KEY
+    url = BASE_URL + path
     try:
-        response = requests.get(url, params=params, timeout=15)
+        response = requests.get(url, params=p, timeout=15)
         if response.status_code == 200:
             time.sleep(0.5)
             return response.json()
         else:
-            print(f"❌ API Error {response.status_code}")
+            print("API Error " + str(response.status_code))
             return None
     except Exception as e:
-        print(f"❌ Request failed: {e}")
+        print("Request failed: " + str(e))
         return None
 
 
@@ -33,9 +34,18 @@ def fetch_today_fixtures():
     if not data:
         return []
     session = Session()
+    count = 0
     for match in data.get("data", []):
         existing = session.query(Match).filter_by(api_id=match["matchId"]).first()
-        match_date = datetime.strptime(match.get("matchTime", ""), "%Y-%m-%d %H:%M:%S") if match.get("matchTime") else datetime.now()
+        mt = match.get("matchTime")
+        if mt and isinstance(mt, str):
+            try:
+                match_date = datetime.strptime(mt, "%Y-%m-%d %H:%M:%S")
+            except:
+                match_date = datetime.now()
+        else:
+            match_date = datetime.now()
+
         if not existing:
             m = Match(
                 api_id=match["matchId"],
@@ -49,17 +59,18 @@ def fetch_today_fixtures():
                 away_team_name=match.get("awayTeamName", ""),
                 home_goals=match.get("homeScore"),
                 away_goals=match.get("awayScore"),
-                status=match.get("matchStatus", "NS"),
+                status=str(match.get("matchStatus", "NS")),
                 venue=match.get("venueName", "")
             )
             session.add(m)
+            count += 1
         else:
             existing.home_goals = match.get("homeScore")
             existing.away_goals = match.get("awayScore")
-            existing.status = match.get("matchStatus", "NS")
+            existing.status = str(match.get("matchStatus", "NS"))
     session.commit()
     session.close()
-    print(f"✅ მატჩები განახლდა: {today}")
+    print("matchebi ganakhлda: " + today + " (" + str(count) + ")")
 
 
 def fetch_all_standings():
@@ -89,8 +100,6 @@ def get_h2h_matches(team1_id, team2_id, limit=5):
 
 def fetch_odds(match_id):
     data = api_request("/sport/football/odds", {"matchId": match_id})
-    if not data:
-        return {}
     result = {
         "home": 0, "draw": 0, "away": 0,
         "over25": 0, "under25": 0,
@@ -99,15 +108,17 @@ def fetch_odds(match_id):
         "over25cards": 0, "over35cards": 0,
         "pen_yes": 0,
     }
+    if not data:
+        return result
     try:
         odds_data = data.get("data", {})
         europe = odds_data.get("europeOdds", {})
-        result["home"] = float(europe.get("home", 0))
-        result["draw"] = float(europe.get("draw", 0))
-        result["away"] = float(europe.get("away", 0))
+        result["home"] = float(europe.get("home", 0) or 0)
+        result["draw"] = float(europe.get("draw", 0) or 0)
+        result["away"] = float(europe.get("away", 0) or 0)
         over_under = odds_data.get("overUnder", {})
-        result["over25"] = float(over_under.get("over", 0))
-        result["under25"] = float(over_under.get("under", 0))
-    except:
-        pass
+        result["over25"] = float(over_under.get("over", 0) or 0)
+        result["under25"] = float(over_under.get("under", 0) or 0)
+    except Exception as e:
+        print("odds error: " + str(e))
     return result
