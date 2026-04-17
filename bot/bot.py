@@ -71,18 +71,29 @@ async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text("ganakhlda! scade /acca 5")
 
 
+async def auto_update(context):
+    print("auto update daiwyo...")
+    fetch_today_fixtures()
+    fetch_all_standings()
+    print("auto update dasrulda!")
+
+
 def main():
     init_db()
     app = Application.builder().token(os.getenv("TELEGRAM_BOT_TOKEN")).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("acca", acca_command))
     app.add_handler(CommandHandler("update", update_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message))
+
+    job_queue = app.job_queue
+    job_queue.run_daily(auto_update, time=__import__('datetime').time(7, 0, 0))
+    job_queue.run_daily(auto_update, time=__import__('datetime').time(19, 0, 0))
+
     print("boti gaushvebula!")
     app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
     main()
-
-
