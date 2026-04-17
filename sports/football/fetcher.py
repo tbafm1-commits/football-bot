@@ -1,39 +1,24 @@
 import requests
 import time
-from datetime import datetime, timedelta
-from database.models import Session, Match, MatchStatistics, TeamStanding, Team, init_db
-from dotenv import load_dotenv
+from datetime import datetime
+from database.models import Session, Match, MatchStatistics, TeamStanding, init_db
 import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
 API_KEY = os.getenv("API_FOOTBALL_KEY")
-BASE_URL = "https://v3.football.api-sports.io"
-
-TRACKED_LEAGUES = {
-    39: "Premier League",
-    140: "La Liga",
-    135: "Serie A",
-    78: "Bundesliga",
-    61: "Ligue 1",
-    2: "UEFA Champions League",
-    3: "UEFA Europa League",
-}
-
-HEADERS = {"x-apisports-key": API_KEY}
+BASE_URL = "http://api.isportsapi.com"
 
 
-def api_request(endpoint, params={}):
-    url = f"{BASE_URL}/{endpoint}"
+def api_request(path, params={}):
+    params["api_key"] = API_KEY
+    url = f"{BASE_URL}{path}"
     try:
-        response = requests.get(url, headers=HEADERS, params=params, timeout=15)
+        response = requests.get(url, params=params, timeout=15)
         if response.status_code == 200:
             time.sleep(0.5)
             return response.json()
-        elif response.status_code == 429:
-            print("⚠️ Rate limit! 60 წამი...")
-            time.sleep(60)
-            return api_request(endpoint, params)
         else:
             print(f"❌ API Error {response.status_code}")
             return None
@@ -42,94 +27,43 @@ def api_request(endpoint, params={}):
         return None
 
 
-def fetch_fixtures(league_id, season, date=None):
-    params = {"league": league_id, "season": season}
-    if date:
-        params["date"] = date
-    data = api_request("fixtures", params)
+def fetch_today_fixtures():
+    today = datetime.now().strftime("%Y-%m-%d")
+    data = api_request("/sport/football/schedule", {"date": today})
     if not data:
         return []
     session = Session()
-    fixtures = []
-    for fixture in data.get("response", []):
-        fix = fixture["fixture"]
-        teams = fixture["teams"]
-        goals = fixture["goals"]
-        league = fixture["league"]
-        match_date = datetime.fromisoformat(fix["date"].replace("Z", "+00:00"))
-        existing = session.query(Match).filter_by(api_id=fix["id"]).first()
-        if existing:
-            existing.home_goals = goals.get("home")
-            existing.away_goals = goals.get("away")
-            existing.status = fix["status"]["short"]
-            existing.updated_at = datetime.utcnow()
-        else:
-            match = Match(
-                api_id=fix["id"], league_id=league["id"],
-                league_name=league["name"], season=league["season"],
-                date=match_date, home_team_id=teams["home"]["id"],
-                home_team_name=teams["home"]["name"],
-                away_team_id=teams["away"]["id"],
-                away_team_name=teams["away"]["name"],
-                home_goals=goals.get("home"), away_goals=goals.get("away"),
-                status=fix["status"]["short"],
-                venue=fix.get("venue", {}).get("name", "Unknown")
+    for match in data.get("data", []):
+        existing = session.query(Match).filter_by(api_id=match["matchId"]).first()
+        match_date = datetime.strptime(match.get("matchTime", ""), "%Y-%m-%d %H:%M:%S") if match.get("matchTime") else datetime.now()
+        if not existing:
+            m = Match(
+                api_id=match["matchId"],
+                league_id=match.get("leagueId", 0),
+                league_name=match.get("leagueName", ""),
+                season=datetime.now().year,
+                date=match_date,
+                home_team_id=match.get("homeTeamId", 0),
+                home_team_name=match.get("homeTeamName", ""),
+                away_team_id=match.get("awayTeamId", 0),
+                away_team_name=match.get("awayTeamName", ""),
+                home_goals=match.get("homeScore"),
+                away_goals=match.get("awayScore"),
+                status=match.get("matchStatus", "NS"),
+                venue=match.get("venueName", "")
             )
-            session.add(match)
-            fixtures.append(match)
-    session.commit()
-    session.close()
-    return fixtures
-
-
-def fetch_standings(league_id, season):
-    data = api_request("standings", {"league": league_id, "season": season})
-    if not data:
-        return False
-    session = Session()
-    try:
-        standings_data = data["response"][0]["league"]["standings"][0]
-    except (IndexError, KeyError):
-        return False
-    for team_data in standings_data:
-        team = team_data["team"]
-        all_stats = team_data["all"]
-        goals = all_stats["goals"]
-        existing = session.query(TeamStanding).filter_by(
-            league_id=league_id, season=season, team_id=team["id"]
-        ).first()
-        sd = {
-            "team_name": team["name"], "rank": team_data["rank"],
-            "points": team_data["points"], "played": all_stats["played"],
-            "won": all_stats["win"], "drawn": all_stats["draw"],
-            "lost": all_stats["lose"], "goals_for": goals["for"],
-            "goals_against": goals["against"],
-            "goal_diff": team_data["goalsDiff"],
-            "form": team_data.get("form", ""),
-            "updated_at": datetime.utcnow()
-        }
-        if existing:
-            for k, v in sd.items():
-                setattr(existing, k, v)
+            session.add(m)
         else:
-            session.add(TeamStanding(league_id=league_id, season=season, team_id=team["id"], **sd))
+            existing.home_goals = match.get("homeScore")
+            existing.away_goals = match.get("awayScore")
+            existing.status = match.get("matchStatus", "NS")
     session.commit()
     session.close()
-    return True
-
-
-def fetch_today_fixtures():
-    today = datetime.now().strftime("%Y-%m-%d")
-    season = datetime.now().year
-    for league_id, league_name in TRACKED_LEAGUES.items():
-        print(f"⚽ {league_name}...")
-        fetch_fixtures(league_id, season, today)
+    print(f"✅ მატჩები განახლდა: {today}")
 
 
 def fetch_all_standings():
-    season = datetime.now().year
-    for league_id, league_name in TRACKED_LEAGUES.items():
-        fetch_standings(league_id, season)
+    pass
 
 
 def get_team_recent_matches(team_id, limit=5):
@@ -152,3 +86,28 @@ def get_h2h_matches(team1_id, team2_id, limit=5):
     session.close()
     return matches
 
+
+def fetch_odds(match_id):
+    data = api_request("/sport/football/odds", {"matchId": match_id})
+    if not data:
+        return {}
+    result = {
+        "home": 0, "draw": 0, "away": 0,
+        "over25": 0, "under25": 0,
+        "btts_yes": 0, "btts_no": 0,
+        "over85c": 0, "over95c": 0,
+        "over25cards": 0, "over35cards": 0,
+        "pen_yes": 0,
+    }
+    try:
+        odds_data = data.get("data", {})
+        europe = odds_data.get("europeOdds", {})
+        result["home"] = float(europe.get("home", 0))
+        result["draw"] = float(europe.get("draw", 0))
+        result["away"] = float(europe.get("away", 0))
+        over_under = odds_data.get("overUnder", {})
+        result["over25"] = float(over_under.get("over", 0))
+        result["under25"] = float(over_under.get("under", 0))
+    except:
+        pass
+    return result
