@@ -136,7 +136,8 @@ async def get_todays_bet_options():
     matches = session.query(Match).filter(
         Match.date >= datetime.combine(today, datetime.min.time()),
         Match.date < datetime.combine(today, datetime.max.time()),
-        Match.status == "FT"
+        Match.status != "FT"
+
     ).all()
     session.close()
 
