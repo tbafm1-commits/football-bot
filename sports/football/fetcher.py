@@ -100,7 +100,6 @@ def get_h2h_matches(team1_id, team2_id, limit=5):
     return matches
 
 
-# odds cache - ar gamoivwviot zedmet requestebs
 _odds_cache = {}
 
 
@@ -127,6 +126,8 @@ def fetch_all_odds():
         for game in data:
             home = game.get("home_team", "")
             away = game.get("away_team", "")
+            if not home or not away:
+                continue
             key = home.lower() + "_" + away.lower()
 
             result = {
@@ -149,7 +150,6 @@ def fetch_all_odds():
                                 result["away"] = float(outcome["price"])
                             elif outcome["name"] == "Draw":
                                 result["draw"] = float(outcome["price"])
-
                     elif market["key"] == "totals":
                         for outcome in market.get("outcomes", []):
                             point = outcome.get("point", 0)
@@ -193,16 +193,25 @@ def fetch_odds(match_id):
     if not match:
         return result
 
+    if not match.home_team_name or not match.away_team_name:
+        return result
+
     all_odds = fetch_all_odds()
     key = match.home_team_name.lower() + "_" + match.away_team_name.lower()
 
     if key in all_odds:
         return all_odds[key]
 
-    # partial match
+    home_parts = match.home_team_name.lower().split()
+    away_parts = match.away_team_name.lower().split()
+
+    if not home_parts or not away_parts:
+        return result
+
+    home_part = home_parts[0]
+    away_part = away_parts[0]
+
     for k, v in all_odds.items():
-        home_part = match.home_team_name.lower().split()[0]
-        away_part = match.away_team_name.lower().split()[0]
         if home_part in k and away_part in k:
             return v
 
