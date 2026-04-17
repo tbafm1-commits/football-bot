@@ -1,3 +1,4 @@
+import traceback
 from datetime import datetime
 from database.models import Session, Match, MatchStatistics, TeamStanding
 from sports.football.fetcher import (
@@ -137,7 +138,6 @@ async def get_todays_bet_options():
         Match.date >= datetime.combine(today, datetime.min.time()),
         Match.date < datetime.combine(today, datetime.max.time()),
         Match.status != "FT"
-
     ).all()
     session.close()
 
@@ -150,6 +150,7 @@ async def get_todays_bet_options():
         ).all()
         session.close()
 
+    print("DB matches: " + str(len(matches)))
     all_options = []
     season = today.year if today.month >= 7 else today.year - 1
 
@@ -181,7 +182,7 @@ async def get_todays_bet_options():
             all_options.extend(options)
 
         except Exception as e:
-            print("match error: " + str(e))
+            print("FULL ERROR: " + traceback.format_exc())
             continue
 
     all_options.sort(key=lambda x: x.our_prob, reverse=True)
