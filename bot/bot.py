@@ -60,7 +60,8 @@ logger.error(“Acca error: “ + str(e))
 await msg.edit_text(“sheсdoma: “ + str(e))
 
 async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-msg = await update.message.reply_text(“vanakhлeb…”)
+msg = await update.message.reply_text(“vanakhleb...
+”)
 fetch_today_fixtures()
 fetch_all_standings()
 await msg.edit_text(“ganakhlda! scade /acca 5”)
