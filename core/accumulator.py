@@ -45,7 +45,8 @@ def combo_score(legs):
 def total_odds(legs):
     result = 1.0
     for leg in legs:
-        result *= leg.odds
+        o = leg.odds if leg.odds >= 1.10 else 1.50
+        result *= o
     return round(result, 2)
 
 
@@ -70,9 +71,9 @@ def has_correlation(legs):
 def _market_type(market):
     m = market.lower()
     if "over" in m or "under" in m:
-        if "კუთხური" in m:
+        if "kutkhuri" in m:
             return "corners"
-        if "ბარათ" in m:
+        if "barati" in m:
             return "cards"
         return "goals"
     if "btts" in m:
@@ -93,7 +94,11 @@ def build_accumulator(all_options, target):
     if not all_options:
         return None
 
-    avg_o = sum(o.odds for o in all_options) / len(all_options)
+    avg_o = sum(
+        (o.odds if o.odds >= 1.10 else 1.50)
+        for o in all_options
+    ) / len(all_options)
+
     leg_counts = ideal_legs(target, avg_o)
 
     best = None
