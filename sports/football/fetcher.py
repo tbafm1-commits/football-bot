@@ -10,26 +10,57 @@ ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 
 LEAGUES = {
-    "Premier League":      "eng.1",
-    "La Liga":             "esp.1",
-    "Bundesliga":          "ger.1",
-    "Serie A":             "ita.1",
-    "Ligue 1":             "fra.1",
-    "Eredivisie":          "ned.1",
-    "Primeira Liga":       "por.1",
-    "Scottish Prem":       "sco.1",
-    "Super Lig":           "tur.1",
-    "Champions League":    "uefa.champions",
-    "Europa League":       "uefa.europa",
-    "Conference League":   "uefa.europa.conf",
-    "MLS":                 "usa.1",
-    "Liga MX":             "mex.1",
-    "Brazilian Serie A":   "bra.1",
-    "Argentine Liga":      "arg.1",
-    "Saudi Pro League":    "sau.1",
-    "J1 League":           "jpn.1",
-    "Championship":        "eng.2",
-    "2. Bundesliga":       "ger.2",
+    "Premier League":           "eng.1",
+    "La Liga":                  "esp.1",
+    "Bundesliga":               "ger.1",
+    "Serie A":                  "ita.1",
+    "Ligue 1":                  "fra.1",
+    "Eredivisie":               "ned.1",
+    "Primeira Liga":            "por.1",
+    "Scottish Prem":            "sco.1",
+    "Super Lig":                "tur.1",
+    "Belgian Pro League":       "bel.1",
+    "Russian Premier League":   "rus.1",
+    "Greek Super League":       "gre.1",
+    "Austrian Bundesliga":      "aut.1",
+    "Swiss Super League":       "sui.1",
+    "Danish Superliga":         "den.1",
+    "Norwegian Eliteserien":    "nor.1",
+    "Swedish Allsvenskan":      "swe.1",
+    "Polish Ekstraklasa":       "pol.1",
+    "Czech First League":       "cze.1",
+    "Romanian Liga 1":          "rou.1",
+    "Croatian HNL":             "cro.1",
+    "Championship":             "eng.2",
+    "League One":               "eng.3",
+    "2. Bundesliga":            "ger.2",
+    "Serie B":                  "ita.2",
+    "La Liga 2":                "esp.2",
+    "Champions League":         "uefa.champions",
+    "Europa League":            "uefa.europa",
+    "Conference League":        "uefa.europa.conf",
+    "Nations League":           "uefa.nations",
+    "MLS":                      "usa.1",
+    "Liga MX":                  "mex.1",
+    "Brazilian Serie A":        "bra.1",
+    "Brazilian Serie B":        "bra.2",
+    "Argentine Liga":           "arg.1",
+    "Colombian Primera A":      "col.1",
+    "Chilean Primera":          "chi.1",
+    "Ecuadorian Serie A":       "ecu.1",
+    "Uruguayan PD":             "uru.1",
+    "Copa Libertadores":        "conmebol.libertadores",
+    "Copa Sudamericana":        "conmebol.sudamericana",
+    "Saudi Pro League":         "sau.1",
+    "UAE Pro League":           "uae.1",
+    "Qatar Stars League":       "qat.1",
+    "J1 League":                "jpn.1",
+    "K League 1":               "kor.1",
+    "Chinese Super League":     "chn.1",
+    "A-League":                 "aus.1",
+    "World Cup":                "fifa.world",
+    "Copa America":             "conmebol.america",
+    "Africa Cup of Nations":    "caf.nations",
 }
 
 
@@ -100,7 +131,6 @@ def fetch_today_fixtures(days_ahead=3):
     for i in range(days_ahead):
         date = datetime.now() + timedelta(days=i)
         date_str = date.strftime("%Y%m%d")
-
         for league_name, slug in LEAGUES.items():
             data = _scoreboard_request(slug, date_str)
             if not data:
@@ -111,7 +141,6 @@ def fetch_today_fixtures(days_ahead=3):
 
     session.commit()
 
-    # მომავალი მატჩების ისტორია
     today = datetime.now().date()
     upcoming = session.query(Match).filter(
         Match.date >= datetime.combine(today, datetime.min.time()),
@@ -240,4 +269,70 @@ def fetch_all_odds():
             "regions": "eu",
             "markets": "h2h,totals",
             "bookmakers": "bet365",
-            "dateFormat": "iso
+            "dateFormat": "iso",
+        }
+        response = requests.get(url, params=params, timeout=15)
+        if response.status_code != 200:
+            print(f"Odds API error: {response.status_code}")
+            return {}
+
+        for game in response.json():
+            home = game.get("home_team", "")
+            away = game.get("away_team", "")
+            if not home or not away:
+                continue
+
+            key = home.lower() + "_" + away.lower()
+            result = {"home": 0, "draw": 0, "away": 0, "over25": 0, "under25": 0}
+
+            for bookmaker in game.get("bookmakers", []):
+                for market in bookmaker.get("markets", []):
+                    if market["key"] == "h2h":
+                        for outcome in market.get("outcomes", []):
+                            if outcome["name"] == home:
+                                result["home"] = float(outcome["price"])
+                            elif outcome["name"] == away:
+                                result["away"] = float(outcome["price"])
+                            elif outcome["name"] == "Draw":
+                                result["draw"] = float(outcome["price"])
+                    elif market["key"] == "totals":
+                        for outcome in market.get("outcomes", []):
+                            if outcome.get("point") == 2.5:
+                                if outcome["name"] == "Over":
+                                    result["over25"] = float(outcome["price"])
+                                else:
+                                    result["under25"] = float(outcome["price"])
+
+            _odds_cache[key] = result
+
+        print(f"odds: {len(_odds_cache)} match")
+        return _odds_cache
+
+    except Exception as e:
+        print(f"Odds error: {e}")
+        return {}
+
+
+def fetch_odds(match_id):
+    empty = {"home": 0, "draw": 0, "away": 0, "over25": 0, "under25": 0}
+
+    session = Session()
+    match = session.query(Match).filter_by(api_id=match_id).first()
+    session.close()
+
+    if not match or not match.home_team_name or not match.away_team_name:
+        return empty
+
+    all_odds = fetch_all_odds()
+    key = match.home_team_name.lower() + "_" + match.away_team_name.lower()
+
+    if key in all_odds:
+        return all_odds[key]
+
+    home_part = match.home_team_name.lower().split()[0]
+    away_part = match.away_team_name.lower().split()[0]
+    for k, v in all_odds.items():
+        if home_part in k and away_part in k:
+            return v
+
+    return empty
