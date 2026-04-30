@@ -1,12 +1,76 @@
+from dataclasses import dataclass, field
+
+
+@dataclass
+class TeamStats:
+    team_id: int
+    team_name: str
+    is_home: bool
+    goals_scored: list = field(default_factory=list)
+    goals_conceded: list = field(default_factory=list)
+    home_goals_scored: list = field(default_factory=list)
+    home_goals_conceded: list = field(default_factory=list)
+    away_goals_scored: list = field(default_factory=list)
+    away_goals_conceded: list = field(default_factory=list)
+    corners_for: list = field(default_factory=list)
+    corners_against: list = field(default_factory=list)
+    yellow_cards: list = field(default_factory=list)
+    red_cards: list = field(default_factory=list)
+    fouls_committed: list = field(default_factory=list)
+    penalties_conceded: list = field(default_factory=list)
+    clean_sheets_home: int = 0
+    clean_sheets_away: int = 0
+    games_played_home: int = 1
+    games_played_away: int = 1
+    home_results: list = field(default_factory=list)
+    away_results: list = field(default_factory=list)
+    rank: int = 10
+    points: int = 20
+    played: int = 1
+
+
+@dataclass
+class H2HStats:
+    matches: list = field(default_factory=list)
+
+
+@dataclass
+class RefereeStats:
+    name: str = "Unknown"
+    avg_yellow_per_game: float = 4.0
+    avg_red_per_game: float = 0.2
+    avg_fouls_per_game: float = 22.0
+    avg_penalties_per_game: float = 0.3
+
+
+@dataclass
+class BetOption:
+    match_id: int
+    home_team: str
+    away_team: str
+    league: str
+    kick_off: str
+    market: str
+    our_prob: float
+    odds: float
+    reason: str
+
+
+def s(lst, n=5, default=1):
+    if not lst:
+        return [default] * n
+    return lst[:n] if len(lst) >= n else lst + [default] * (n - len(lst))
+
+
 def analyze_goals(home, away, h2h):
     n = 5
 
     def avg_list(lst):
         return sum(lst[:n]) / max(len(lst[:n]), 1) if lst else 1.0
 
-    home_scored = avg_list(home.goals_scored)
+    home_scored   = avg_list(home.goals_scored)
     home_conceded = avg_list(home.goals_conceded)
-    away_scored = avg_list(away.goals_scored)
+    away_scored   = avg_list(away.goals_scored)
     away_conceded = avg_list(away.goals_conceded)
 
     h2h_list = [
@@ -23,12 +87,12 @@ def analyze_goals(home, away, h2h):
     )
 
     if avg >= 2.5:
-        prob = min(0.82, 0.55 + (avg - 2.5) * 0.08)
-        market = "Over 2.5 goli"
+        prob     = min(0.82, 0.55 + (avg - 2.5) * 0.08)
+        market   = "Over 2.5 goli"
         odds_key = "over25"
     else:
-        prob = min(0.82, 0.55 + (2.5 - avg) * 0.08)
-        market = "Under 2.5 goli"
+        prob     = min(0.82, 0.55 + (2.5 - avg) * 0.08)
+        market   = "Under 2.5 goli"
         odds_key = "under25"
 
     reason = (
@@ -39,7 +103,92 @@ def analyze_goals(home, away, h2h):
     return {"market": market, "prob": prob, "reason": reason, "odds_key": odds_key}
 
 
-# get_all_markets-ში goals ბლოკი გახდება:
+def _form_pts(results, n=5):
+    pts = {"W": 3, "D": 1, "L": 0}
+    r = s(results, n, "D")
+    return sum(pts.get(x, 1) for x in r) / (n * 3)
+
+
+def analyze_1x2(home, away, h2h):
+    home_form  = _form_pts(home.home_results)
+    away_form  = _form_pts(away.away_results)
+    pts_diff   = (home.points - away.points) / max(home.played, 1)
+    rank_factor = (away.rank - home.rank) / 20
+
+    n = 5
+    h2h_hw = sum(
+        1 for m in h2h.matches[:n]
+        if m.get("home_id") == home.team_id
+        and m.get("home_goals", 0) > m.get("away_goals", 0)
+    )
+    h2h_aw = sum(
+        1 for m in h2h.matches[:n]
+        if m.get("home_id") == home.team_id
+        and m.get("away_goals", 0) > m.get("home_goals", 0)
+    )
+    h2h_d = len(h2h.matches[:n]) - h2h_hw - h2h_aw
+    h2h_n = max(len(h2h.matches[:n]), 1)
+
+    home_str = (
+        home_form * 0.35 +
+        max(0, pts_diff * 0.10) +
+        max(0, rank_factor * 0.15) +
+        (h2h_hw / h2h_n) * 0.20 +
+        0.10
+    )
+    away_str = (
+        away_form * 0.35 +
+        max(0, -pts_diff * 0.10) +
+        max(0, -rank_factor * 0.15) +
+        (h2h_aw / h2h_n) * 0.20
+    )
+    draw_str = 0.25 + (h2h_d / h2h_n) * 0.10
+
+    total = home_str + away_str + draw_str
+    hp = home_str / total
+    dp = draw_str / total
+    ap = away_str / total
+
+    reason = (
+        "forma: " + home.team_name + " " + str(round(home_form, 2)) +
+        " vs " + away.team_name + " " + str(round(away_form, 2)) +
+        " | H2H: " + str(h2h_hw) + "W " + str(h2h_d) + "D " + str(h2h_aw) + "L"
+    )
+    return {
+        "home": {"market": home.team_name + " gamarjveba", "prob": round(hp, 3), "reason": reason},
+        "draw": {"market": "fre", "prob": round(dp, 3), "reason": reason},
+        "away": {"market": away.team_name + " gamarjveba", "prob": round(ap, 3), "reason": reason},
+    }
+
+
+def analyze_btts(home, away, h2h):
+    n = 5
+    home_scored_avg = sum(s(home.goals_scored, n)) / n
+    away_scored_avg = sum(s(away.goals_scored, n)) / n
+    home_cs_rate = home.clean_sheets_home / max(home.games_played_home, 1)
+    away_cs_rate = away.clean_sheets_away / max(away.games_played_away, 1)
+
+    h2h_btts = sum(
+        1 for m in h2h.matches[:n]
+        if m.get("home_goals", 0) > 0 and m.get("away_goals", 0) > 0
+    )
+    h2h_btts_rate = h2h_btts / max(len(h2h.matches[:n]), 1)
+
+    prob_home_scores = home_scored_avg / (home_scored_avg + 0.4) * (1 - away_cs_rate * 0.25)
+    prob_away_scores = away_scored_avg / (away_scored_avg + 0.4) * (1 - home_cs_rate * 0.25)
+    btts_prob = prob_home_scores * prob_away_scores * 0.55 + h2h_btts_rate * 0.45
+    btts_prob = max(0.20, min(0.85, btts_prob))
+
+    market    = "BTTS - diakh" if btts_prob >= 0.52 else "BTTS - ara"
+    final_prob = btts_prob if btts_prob >= 0.52 else 1 - btts_prob
+
+    reason = (
+        home.team_name + " sash.gatana: " + str(round(home_scored_avg, 1)) +
+        " | " + away.team_name + ": " + str(round(away_scored_avg, 1))
+    )
+    return {"market": market, "prob": round(final_prob, 3), "reason": reason}
+
+
 def get_all_markets(match_id, home, away, h2h, ref, odds, kick_off, league):
     results = []
 
@@ -80,8 +229,6 @@ def get_all_markets(match_id, home, away, h2h, ref, odds, kick_off, league):
         results.append(make_option(b["market"], b["prob"], odds.get(odds_key, 0), b["reason"]))
     except Exception as e:
         print("btts error: " + str(e))
-
-    # corners და cards გამორთულია — ESPN მონაცემს არ იძლევა
 
     results = [r for r in results if r.our_prob >= 0.55]
     results.sort(key=lambda x: x.our_prob, reverse=True)
