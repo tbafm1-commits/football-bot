@@ -74,6 +74,20 @@ def _get_team_id(team):
         return 0
 
 
+def _get_score(score):
+    if score is None:
+        return None
+    if isinstance(score, dict):
+        try:
+            return int(float(score.get("value", 0) or 0))
+        except:
+            return None
+    try:
+        return int(float(score))
+    except:
+        return None
+
+
 def _scoreboard_request(league_slug, date_str):
     url = f"{ESPN_BASE}/{league_slug}/scoreboard"
     try:
@@ -102,9 +116,6 @@ def _save_match(session, event, league_name, status_override=None):
         completed = event["competitions"][0].get("status", {}).get("type", {}).get("completed", False)
         status = status_override or ("FT" if completed else event.get("status", {}).get("type", {}).get("shortDetail", "NS"))
 
-        home_score = home.get("score")
-        away_score = away.get("score")
-
         existing = session.query(Match).filter_by(api_id=match_id).first()
         if not existing:
             m = Match(
@@ -117,16 +128,16 @@ def _save_match(session, event, league_name, status_override=None):
                 home_team_name=home["team"]["displayName"],
                 away_team_id=_get_team_id(away["team"]),
                 away_team_name=away["team"]["displayName"],
-                home_goals=int(home_score) if home_score is not None else None,
-                away_goals=int(away_score) if away_score is not None else None,
+                home_goals=_get_score(home.get("score")),
+                away_goals=_get_score(away.get("score")),
                 status=status,
                 venue=event["competitions"][0].get("venue", {}).get("fullName", "")
             )
             session.add(m)
             return True
         else:
-            existing.home_goals = int(home_score) if home_score is not None else None
-            existing.away_goals = int(away_score) if away_score is not None else None
+            existing.home_goals = _get_score(home.get("score"))
+            existing.away_goals = _get_score(away.get("score"))
             existing.status = status
             return False
     except Exception as e:
