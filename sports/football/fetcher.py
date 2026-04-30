@@ -64,6 +64,16 @@ LEAGUES = {
 }
 
 
+def _get_team_id(team):
+    tid = team.get("id", 0)
+    if isinstance(tid, dict):
+        return int(tid.get("value", 0) or 0)
+    try:
+        return int(tid or 0)
+    except:
+        return 0
+
+
 def _scoreboard_request(league_slug, date_str):
     url = f"{ESPN_BASE}/{league_slug}/scoreboard"
     try:
@@ -103,9 +113,9 @@ def _save_match(session, event, league_name, status_override=None):
                 league_name=league_name,
                 season=datetime.now().year,
                 date=match_date,
-                home_team_id=int(home["team"]["id"]),
+                home_team_id=_get_team_id(home["team"]),
                 home_team_name=home["team"]["displayName"],
-                away_team_id=int(away["team"]["id"]),
+                away_team_id=_get_team_id(away["team"]),
                 away_team_name=away["team"]["displayName"],
                 home_goals=int(home_score) if home_score is not None else None,
                 away_goals=int(away_score) if away_score is not None else None,
@@ -204,7 +214,7 @@ def fetch_h2h_history(home_id, away_id, league_slug, limit=5):
         for event in data.get("events", []):
             try:
                 competitors = event["competitions"][0]["competitors"]
-                ids = [int(t["team"]["id"]) for t in competitors]
+                ids = [_get_team_id(t["team"]) for t in competitors]
                 completed = event["competitions"][0].get("status", {}).get("type", {}).get("completed", False)
                 if away_id in ids and completed:
                     h2h_events.append(event)
