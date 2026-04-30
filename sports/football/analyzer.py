@@ -89,7 +89,7 @@ def build_team_stats(team_id, team_name, is_home, league_id, season):
 
 
 def build_h2h_stats(home_id, away_id):
-    matches = get_h2h_matches(home_id, away_id, limit=6)
+    matches = get_h2h_matches(home_id, away_id, limit=5)
     h2h = H2HStats()
     for match in matches:
         if match.home_goals is None:
