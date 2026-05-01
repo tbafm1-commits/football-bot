@@ -62,47 +62,6 @@ def s(lst, n=5, default=1):
     return lst[:n] if len(lst) >= n else lst + [default] * (n - len(lst))
 
 
-def analyze_goals(home, away, h2h):
-    n = 5
-
-    def avg_list(lst):
-        return sum(lst[:n]) / max(len(lst[:n]), 1) if lst else 1.0
-
-    home_scored   = avg_list(home.goals_scored)
-    home_conceded = avg_list(home.goals_conceded)
-    away_scored   = avg_list(away.goals_scored)
-    away_conceded = avg_list(away.goals_conceded)
-
-    h2h_list = [
-        m["home_goals"] + m["away_goals"]
-        for m in h2h.matches[:n]
-        if "home_goals" in m
-    ]
-    h2h_avg = sum(h2h_list) / len(h2h_list) if h2h_list else (home_scored + away_scored)
-
-    avg = (
-        (home_scored + away_conceded) * 0.35 +
-        (away_scored + home_conceded) * 0.35 +
-        h2h_avg * 0.30
-    )
-
-    if avg >= 2.5:
-        prob     = min(0.82, 0.55 + (avg - 2.5) * 0.08)
-        market   = "Over 2.5 goli"
-        odds_key = "over25"
-    else:
-        prob     = min(0.82, 0.55 + (2.5 - avg) * 0.08)
-        market   = "Under 2.5 goli"
-        odds_key = "under25"
-
-    reason = (
-        home.team_name + " sash: " + str(round(home_scored, 1)) +
-        " | " + away.team_name + " sash: " + str(round(away_scored, 1)) +
-        " | mosalodneli: " + str(round(avg, 2))
-    )
-    return {"market": market, "prob": prob, "reason": reason, "odds_key": odds_key}
-
-
 def _form_pts(results, n=5):
     pts = {"W": 3, "D": 1, "L": 0}
     r = s(results, n, "D")
@@ -154,39 +113,12 @@ def analyze_1x2(home, away, h2h):
         " vs " + away.team_name + " " + str(round(away_form, 2)) +
         " | H2H: " + str(h2h_hw) + "W " + str(h2h_d) + "D " + str(h2h_aw) + "L"
     )
+
     return {
         "home": {"market": home.team_name + " gamarjveba", "prob": round(hp, 3), "reason": reason},
         "draw": {"market": "fre", "prob": round(dp, 3), "reason": reason},
         "away": {"market": away.team_name + " gamarjveba", "prob": round(ap, 3), "reason": reason},
     }
-
-
-def analyze_btts(home, away, h2h):
-    n = 5
-    home_scored_avg = sum(s(home.goals_scored, n)) / n
-    away_scored_avg = sum(s(away.goals_scored, n)) / n
-    home_cs_rate = home.clean_sheets_home / max(home.games_played_home, 1)
-    away_cs_rate = away.clean_sheets_away / max(away.games_played_away, 1)
-
-    h2h_btts = sum(
-        1 for m in h2h.matches[:n]
-        if m.get("home_goals", 0) > 0 and m.get("away_goals", 0) > 0
-    )
-    h2h_btts_rate = h2h_btts / max(len(h2h.matches[:n]), 1)
-
-    prob_home_scores = home_scored_avg / (home_scored_avg + 0.4) * (1 - away_cs_rate * 0.25)
-    prob_away_scores = away_scored_avg / (away_scored_avg + 0.4) * (1 - home_cs_rate * 0.25)
-    btts_prob = prob_home_scores * prob_away_scores * 0.55 + h2h_btts_rate * 0.45
-    btts_prob = max(0.20, min(0.85, btts_prob))
-
-    market    = "BTTS - diakh" if btts_prob >= 0.52 else "BTTS - ara"
-    final_prob = btts_prob if btts_prob >= 0.52 else 1 - btts_prob
-
-    reason = (
-        home.team_name + " sash.gatana: " + str(round(home_scored_avg, 1)) +
-        " | " + away.team_name + ": " + str(round(away_scored_avg, 1))
-    )
-    return {"market": market, "prob": round(final_prob, 3), "reason": reason}
 
 
 def get_all_markets(match_id, home, away, h2h, ref, odds, kick_off, league):
@@ -206,29 +138,12 @@ def get_all_markets(match_id, home, away, h2h, ref, odds, kick_off, league):
         )
 
     try:
-        g = analyze_goals(home, away, h2h)
-        results.append(make_option(
-            g["market"], g["prob"],
-            odds.get(g["odds_key"], 0),
-            g["reason"]
-        ))
-    except Exception as e:
-        print("goals error: " + str(e))
-
-    try:
         r = analyze_1x2(home, away, h2h)
         results.append(make_option(r["home"]["market"], r["home"]["prob"], odds.get("home", 0), r["home"]["reason"]))
         results.append(make_option(r["draw"]["market"], r["draw"]["prob"], odds.get("draw", 0), r["draw"]["reason"]))
         results.append(make_option(r["away"]["market"], r["away"]["prob"], odds.get("away", 0), r["away"]["reason"]))
     except Exception as e:
         print("1x2 error: " + str(e))
-
-    try:
-        b = analyze_btts(home, away, h2h)
-        odds_key = "btts_yes" if "diakh" in b["market"] else "btts_no"
-        results.append(make_option(b["market"], b["prob"], odds.get(odds_key, 0), b["reason"]))
-    except Exception as e:
-        print("btts error: " + str(e))
 
     results = [r for r in results if r.our_prob >= 0.55]
     results.sort(key=lambda x: x.our_prob, reverse=True)
